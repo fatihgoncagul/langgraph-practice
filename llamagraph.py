@@ -5,39 +5,49 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_ollama import ChatOllama
-from langchain_core.prompts import ChatPromptTemplate
 from tools import get_lab_results, get_patient_vitals
 from tool_node import BasicToolNode
-from langchain_openai import ChatOpenAI
 
 class State(TypedDict):
     messages: Annotated[list, add_messages]
 
 graph_builder = StateGraph(State)
 
-llm = ChatOpenAI(
-    base_url="http://localhost:1234/v1",
-    api_key="lm-studio",  # herhangi bir şey olabilir, kontrol edilmiyor
-     # LM Studio'daki tam model ismi
-)
-#llm = ChatOllama(model="llama3.1")
+
+llm = ChatOllama(model="llama3.1")
 
 tools = [get_patient_vitals, get_lab_results]
 llm_with_tools = llm.bind_tools(tools)
 
-# 🔧 Prompt örneği içeren agent yönlendirme formatı
-# 🔧 Prompt örneği içeren agent yönlendirme formatı
 initial_messages = [
     {
         "role": "system",
         "content": """
-Sen bir yapay zekâ sağlık asistanısın. Aşağıdaki iki aracı kullanabilirsin:
+Sen bir yapay zekâ sağlık asistanısın. Normal sohbet mi etmek istiyorsa ona göre davran onun haricinde sadece tool kullanman gerekiyorsa kullan.
+Eğer kullanıcı sadece sohbet ediyorsa (örneğin “Nasılsın”, “Üzgünüm”, “Merhaba” gibi),
+herhangi bir tool çağırma. Tool çağrıları sadece tıbbi veri istenirse yapılmalı.
+Aşağıdaki iki aracı kullanabilirsin:
+Eğer aynı hasta için tool çağrısı yaptıysan ve veri geldiyse tekrar aynı toolu çağıramazsın. Tool işlemlerinden sonra gerekiyorsa kısa tıbbi değerlendirme yapabilirsin yorumlayabilirsin.
+
 
 1. get_patient_vitals – Belirli bir hastanın vital bilgilerini getirir.  
-   Örnek: Action Input: { "patient_id": 35 }
+   Örnek: Action Input: { "patient_id": integer }
 
 2. get_lab_results – Belirli bir hastanın laboratuvar test sonuçlarını getirir.  
-   Örnek: Action Input: { "patient_id": 35 }
+   Örnek: Action Input: { "patient_id": integer }
+
+get_patient_vitals tool'u aşağıdaki bilgiler için kullanılır:
+- Ateş (sıcaklık, fever, temperature)
+- Nabız (heart rate, pulse)
+- Tansiyon (kan basıncı, blood pressure)
+- Solunum hızı (respiration rate)
+- Kan grubu
+
+get_lab_results tool'u aşağıdaki bilgiler için kullanılır:
+- Hemoglobin, Hematokrit, WBC, RBC, Platelet
+- MCH, MCHC, MCV, RDW, MPV gibi laboratuvar kan testleri
+
+Eğer promptta bu bilgiler geçiyorsa ilgili tool'u çağırmalısın. Gerekirse her iki tool'u da sırayla kullan.
 
 Kullanıcı senden şunları isteyebilir:
 - Hasta bilgilerini istemek
@@ -54,15 +64,16 @@ Aşağıdaki kurallara dikkat et:
 
 Tool Kullanım Formatı:
 Thought: Hastanın vital bilgilerine ihtiyacım var.
+
 Action: get_patient_vitals
-Action Input: { "patient_id": 35 }
+Action Input: { "patient_id": integer }
 Observation: ...
 Thought: Artık cevap verebilirim.
 Final Answer: ...
 
 Thought: Hastanın laboratuvar bilgilerine ihtiyacım var.
 Action: get_lab_results
-Action Input: { "patient_id": 35 }
+Action Input: { "patient_id": integer }
 Observation: ...
 Thought: Artık cevap verebilirim.
 Final Answer: ...
